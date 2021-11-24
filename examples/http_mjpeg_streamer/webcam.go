@@ -52,8 +52,9 @@ func main() {
 	dev := flag.String("d", "/dev/video0", "video device to use")
 	fmtstr := flag.String("f", "", "video format to use, default first supported")
 	szstr := flag.String("s", "", "frame size to use, default largest one")
-	single := flag.Bool("m", false, "single image http mode, default mjpeg video")
-	addr := flag.String("l", ":8080", "addr to listien")
+	//single := flag.Bool("m", false, "single image http mode, default mjpeg video")
+	addr := flag.String("l", ":8080", "addr to listien for single frames")
+	mjpgaddr := flag.String("m", ":8081", "addr to listien for mjpeg")
 	fps := flag.Bool("p", false, "print fps info")
 	flag.Parse()
 
@@ -134,16 +135,16 @@ FMT:
 	}
 
 	var (
-		li   chan *bytes.Buffer = make(chan *bytes.Buffer)
-		fi   chan []byte        = make(chan []byte)
+		li   chan *bytes.Buffer = make(chan *bytes.Buffer) // JPEG-encoded image
+		fi   chan []byte        = make(chan []byte) // Raw image from camera
 		back chan struct{}      = make(chan struct{})
 	)
 	go encodeToImage(cam, back, fi, li, w, h, f)
-	if *single {
+	//if *single {
 		go httpImage(*addr, li)
-	} else {
-		go httpVideo(*addr, li)
-	}
+	//} else {
+		go httpVideo(*mjpgaddr, li)
+	//}
 
 	timeout := uint32(5) //5 seconds
 	start := time.Now()
@@ -248,6 +249,7 @@ func encodeToImage(wc *webcam.Webcam, back chan struct{}, fi chan []byte, li cha
 }
 
 func httpImage(addr string, li chan *bytes.Buffer) {
+	log.Println("JPEG single image listening at", addr)
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		log.Println("connect from", r.RemoteAddr, r.URL)
 		if r.URL.Path != "/" {
@@ -273,9 +275,10 @@ func httpImage(addr string, li chan *bytes.Buffer) {
 }
 
 func httpVideo(addr string, li chan *bytes.Buffer) {
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	log.Println("MJPEG stream listening at", addr)
+	http.HandleFunc("/mjpeg", func(w http.ResponseWriter, r *http.Request) {
 		log.Println("connect from", r.RemoteAddr, r.URL)
-		if r.URL.Path != "/" {
+		if r.URL.Path != "/mjpeg" {
 			http.NotFound(w, r)
 			return
 		}
